@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bank Transfer System — Live Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-logo">
+      <span class="logo-icon">⬡</span>
+      <span class="logo-title">Bank Transfer System</span>
+    </div>
+    <div class="header-status">
+      <span id="connection-dot" class="status-dot"></span>
+      <span id="connection-label">Connecting...</span>
+    </div>
+    <button id="btn-new-transfer" class="btn-primary" onclick="openModal()">+ New Transfer</button>
+  </header>
+
+  <!-- MAIN DASHBOARD -->
+  <main class="dashboard">
+
+    <!-- LEFT: Account Service -->
+    <section class="panel panel-account" id="panel-account">
+      <div class="panel-header">
+        <div class="panel-badge account">account-service :8080</div>
+        <span class="panel-subtitle">PostgreSQL · JPA · Outbox</span>
+      </div>
+      <div id="accounts-list" class="accounts-list">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+      <div class="panel-section-title">Recent Ledger Events</div>
+      <div id="ledger-list" class="ledger-list"></div>
+    </section>
+
+    <!-- CENTER: Kafka Broker -->
+    <section class="panel panel-kafka" id="panel-kafka">
+      <div class="panel-header">
+        <div class="panel-badge kafka">kafka :9092</div>
+        <span class="panel-subtitle">KRaft · No Zookeeper</span>
+      </div>
+      <div class="kafka-topics" id="kafka-topics">
+        <div class="topic-row" data-topic="transfer-requested">
+          <span class="topic-dot"></span>
+          <span class="topic-name">transfer-requested</span>
+          <span class="topic-count" id="cnt-transfer-requested">0</span>
+        </div>
+        <div class="topic-row" data-topic="debit-reserved">
+          <span class="topic-dot"></span>
+          <span class="topic-name">debit-reserved</span>
+          <span class="topic-count" id="cnt-debit-reserved">0</span>
+        </div>
+        <div class="topic-row" data-topic="debit-failed">
+          <span class="topic-dot error"></span>
+          <span class="topic-name">debit-failed</span>
+          <span class="topic-count" id="cnt-debit-failed">0</span>
+        </div>
+        <div class="topic-row" data-topic="credit-requested">
+          <span class="topic-dot"></span>
+          <span class="topic-name">credit-requested</span>
+          <span class="topic-count" id="cnt-credit-requested">0</span>
+        </div>
+        <div class="topic-row" data-topic="credit-applied">
+          <span class="topic-dot success"></span>
+          <span class="topic-name">credit-applied</span>
+          <span class="topic-count" id="cnt-credit-applied">0</span>
+        </div>
+        <div class="topic-row" data-topic="credit-failed">
+          <span class="topic-dot error"></span>
+          <span class="topic-name">credit-failed</span>
+          <span class="topic-count" id="cnt-credit-failed">0</span>
+        </div>
+        <div class="topic-row" data-topic="debit-reversal-requested">
+          <span class="topic-dot warning"></span>
+          <span class="topic-name">debit-reversal-requested</span>
+          <span class="topic-count" id="cnt-debit-reversal-requested">0</span>
+        </div>
+        <div class="topic-row" data-topic="debit-reversed">
+          <span class="topic-dot warning"></span>
+          <span class="topic-name">debit-reversed</span>
+          <span class="topic-count" id="cnt-debit-reversed">0</span>
+        </div>
+      </div>
+
+      <!-- Particle canvas -->
+      <canvas id="particle-canvas"></canvas>
+
+      <div class="kafka-event-log" id="kafka-event-log">
+        <div class="event-log-title">Event Stream</div>
+        <div id="event-log-entries"></div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Transfer Service -->
+    <section class="panel panel-transfer" id="panel-transfer">
+      <div class="panel-header">
+        <div class="panel-badge transfer">transfer-service :8081</div>
+        <span class="panel-subtitle">Saga Orchestrator · State Machine</span>
+      </div>
+      <div class="saga-legend">
+        <span class="badge requested">REQUESTED</span>
+        <span class="arrow">→</span>
+        <span class="badge debit-reserved">DEBIT_RESERVED</span>
+        <span class="arrow">→</span>
+        <span class="badge completed">COMPLETED</span>
+      </div>
+      <div class="saga-legend" style="margin-top:4px">
+        <span class="badge compensating">COMPENSATING</span>
+        <span class="arrow">→</span>
+        <span class="badge cancelled">CANCELLED</span>
+      </div>
+      <div id="transfers-list" class="transfers-list">
+        <div class="empty-state">No transfers yet. Create one →</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: New Transfer -->
+  <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal(event)">
+    <div class="modal">
+      <div class="modal-title">New Transfer</div>
+      <label>Origin Account ID</label>
+      <input id="input-origin" type="text" placeholder="uuid..." />
+      <label>Destination Account ID</label>
+      <input id="input-dest" type="text" placeholder="uuid..." />
+      <label>Amount (R$)</label>
+      <input id="input-amount" type="number" min="0.01" step="0.01" placeholder="100.00" />
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn-primary" onclick="submitTransfer()" id="btn-submit">Send Transfer</button>
+      </div>
+      <div id="modal-feedback" class="modal-feedback hidden"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

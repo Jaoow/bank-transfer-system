@@ -1,9 +1,11 @@
 package com.jaoow.banktransfer.account.adapter.out.messaging;
 
+import com.jaoow.banktransfer.account.adapter.in.web.AccountController;
 import com.jaoow.banktransfer.account.adapter.out.persistence.OutboxEventJpaEntity;
 import com.jaoow.banktransfer.account.adapter.out.persistence.OutboxEventJpaRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -14,13 +16,17 @@ import java.util.List;
 public class OutboxPublisherScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxPublisherScheduler.class);
-    
+
     private final OutboxEventJpaRepository outboxRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    private final AccountController accountController;
 
-    public OutboxPublisherScheduler(OutboxEventJpaRepository outboxRepository, KafkaTemplate<String, String> kafkaTemplate) {
+    public OutboxPublisherScheduler(OutboxEventJpaRepository outboxRepository,
+                                    KafkaTemplate<String, String> kafkaTemplate,
+                                    @Lazy AccountController accountController) {
         this.outboxRepository = outboxRepository;
         this.kafkaTemplate = kafkaTemplate;
+        this.accountController = accountController;
     }
 
     @Scheduled(fixedDelay = 2000)
@@ -32,6 +38,8 @@ public class OutboxPublisherScheduler {
                 kafkaTemplate.send(event.getTopic(), event.getEventKey(), event.getPayload()).get(); // sync send to ensure order
                 event.setPublished(true);
                 outboxRepository.save(event);
+                // Notifica clientes SSE em tempo real
+                accountController.broadcastEvent(event.getTopic(), event.getEventKey(), event.getPayload());
                 log.info("Published outbox event to topic {}: {}", event.getTopic(), event.getId());
             } catch (Exception e) {
                 log.error("Failed to publish outbox event {}. Will retry later.", event.getId(), e);
