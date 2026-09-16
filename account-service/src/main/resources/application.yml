@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: account-service
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: account-service
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+    listener:
+      ack-mode: manual
