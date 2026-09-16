@@ -105,6 +105,11 @@ function connectSSE() {
   try {
     const es = new EventSource(`${ACCOUNT_SERVICE_URL}/events/stream`);
 
+    es.onopen = () => {
+      dot.className   = 'status-dot connected';
+      label.textContent = 'Live';
+    };
+
     es.addEventListener('connected', () => {
       dot.className   = 'status-dot connected';
       label.textContent = 'Live';

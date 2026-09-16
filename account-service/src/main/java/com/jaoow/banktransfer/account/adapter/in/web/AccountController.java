@@ -11,29 +11,28 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.springframework.web.bind.annotation.CrossOrigin;
+
+@CrossOrigin(origins = "*")
 @RestController
 public class AccountController {
 
     private final AccountJpaRepository accountRepository;
     private final AccountEventJpaRepository accountEventRepository;
-    private final OutboxEventJpaRepository outboxRepository;
 
     // Lista thread-safe de emitters SSE ativos
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
     public AccountController(AccountJpaRepository accountRepository,
-                             AccountEventJpaRepository accountEventRepository,
-                             OutboxEventJpaRepository outboxRepository) {
+            AccountEventJpaRepository accountEventRepository) {
         this.accountRepository = accountRepository;
         this.accountEventRepository = accountEventRepository;
-        this.outboxRepository = outboxRepository;
     }
 
     @GetMapping("/accounts")
