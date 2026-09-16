@@ -1,5 +1,7 @@
 package com.jaoow.banktransfer.account.application;
 
+import com.jaoow.banktransfer.account.adapter.out.persistence.AccountEventJpaEntity;
+import com.jaoow.banktransfer.account.adapter.out.persistence.AccountEventJpaRepository;
 import com.jaoow.banktransfer.account.adapter.out.persistence.ProcessedEventJpaEntity;
 import com.jaoow.banktransfer.account.adapter.out.persistence.ProcessedEventJpaRepository;
 import com.jaoow.banktransfer.account.domain.model.Account;
@@ -17,13 +19,16 @@ public class ApplyCreditService implements ApplyCreditUseCase {
 
     private final AccountRepository accountRepository;
     private final ProcessedEventJpaRepository processedEventRepository;
+    private final AccountEventJpaRepository accountEventJpaRepository;
     private final EventPublisher eventPublisher;
 
     public ApplyCreditService(AccountRepository accountRepository,
                               ProcessedEventJpaRepository processedEventRepository,
+                              AccountEventJpaRepository accountEventJpaRepository,
                               EventPublisher eventPublisher) {
         this.accountRepository = accountRepository;
         this.processedEventRepository = processedEventRepository;
+        this.accountEventJpaRepository = accountEventJpaRepository;
         this.eventPublisher = eventPublisher;
     }
 
@@ -42,6 +47,7 @@ public class ApplyCreditService implements ApplyCreditUseCase {
 
             account.credit(amount);
             accountRepository.save(account);
+            accountEventJpaRepository.save(new AccountEventJpaEntity(accountId, "CREDIT", amount));
             processedEventRepository.save(new ProcessedEventJpaEntity(idempotencyKey, "CREDIT_RESERVED"));
 
             // 2. publica DEPOIS de persistir — outbox simplificado (vamos evoluir isso no bônus)

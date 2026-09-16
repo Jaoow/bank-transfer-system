@@ -4,6 +4,7 @@ import com.jaoow.banktransfer.transfer.domain.model.Transfer;
 import com.jaoow.banktransfer.transfer.domain.model.TransferStatus;
 import com.jaoow.banktransfer.transfer.domain.port.in.HandleDebitFailedUseCase;
 import com.jaoow.banktransfer.transfer.domain.port.in.HandleDebitReservedUseCase;
+import com.jaoow.banktransfer.transfer.domain.port.in.HandleDebitReversedUseCase;
 import com.jaoow.banktransfer.transfer.domain.port.out.EventPublisher;
 import com.jaoow.banktransfer.transfer.domain.port.out.TransferRepository;
 import org.springframework.stereotype.Service;
@@ -13,7 +14,7 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 @Service
-public class ProcessSagaEventsService implements HandleDebitReservedUseCase, HandleDebitFailedUseCase {
+public class ProcessSagaEventsService implements HandleDebitReservedUseCase, HandleDebitFailedUseCase, HandleDebitReversedUseCase {
 
     private final TransferRepository transferRepository;
     private final EventPublisher eventPublisher;
@@ -47,6 +48,20 @@ public class ProcessSagaEventsService implements HandleDebitReservedUseCase, Han
     public void handle(UUID transferId, String reason) {
         Transfer transfer = transferRepository.findById(transferId)
                 .orElseThrow(() -> new IllegalStateException("Transferência não encontrada: " + transferId));
+
+        transfer.markCancelled();
+        transferRepository.save(transfer);
+    }
+
+    @Override
+    @Transactional
+    public void handle(UUID transferId) {
+        Transfer transfer = transferRepository.findById(transferId)
+                .orElseThrow(() -> new IllegalStateException("Transferência não encontrada: " + transferId));
+
+        if (transfer.getStatus() != TransferStatus.COMPENSATING) {
+            return;
+        }
 
         transfer.markCancelled();
         transferRepository.save(transfer);
