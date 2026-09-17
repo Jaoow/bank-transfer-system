@@ -24,86 +24,94 @@ O projeto foi construído seguindo estritamente as diretrizes de **Arquitetura H
 
 Além disso, implementamos padrões "nível bancário" para resiliência e consistência:
 
-1. **Saga Pattern (Coreografia)**:
-   - Uma transferência bancária envolve mexer em saldos de origens diferentes (e microsserviços diferentes).
-   - O `transfer-service` atua como o orquestrador de estados (`REQUESTED`, `DEBIT_RESERVED`, `COMPLETED`).
-   - Se um débito ocorre mas o crédito falha (ex: conta destino inválida), a Saga compensatória é ativada (`COMPENSATING`) e um evento de estorno (`DebitReversed`) é emitido.
+1. **Saga Pattern (Orquestração)**:
+   - Uma transferência bancária envolve modificação de saldos entre contas de forma distribuída.
+   - O `transfer-service` atua como o **Orquestrador da Saga**, controlando a máquina de estados (`REQUESTED` → `DEBIT_RESERVED` → `COMPLETED`).
+   - Caso o débito ocorra mas o crédito falhe (ex: conta de destino inexistente ou inativa), o fluxo compensatório é acionado: estado `COMPENSATING`, publicação de `debit-reversal-requested`, execução do estorno (`ReverseDebit`) pelo `account-service`, emissão de `debit-reversed` e finalização da transferência como `CANCELLED`.
 
 2. **Outbox Pattern**:
-   - Para evitar inconsistências onde o banco comita mas o Kafka falha ao enviar o evento (Two-Phase Commit problem).
-   - Eventos são salvos na tabela `outbox_events` do banco relacional na **mesma transação** em que o saldo é alterado.
-   - Um `@Scheduled` em background lê essa tabela e despacha com segurança para o Kafka.
+   - Para evitar inconsistências onde a transação do banco comita mas o Kafka falha ao publicar (Two-Phase Commit problem).
+   - No `account-service`, eventos de domínio são salvos na tabela `outbox_events` na **mesma transação relacional** em que o saldo é alterado.
+   - Um scheduler (`OutboxPublisherScheduler`) lê a tabela periodicamente e despacha os eventos para os tópicos do Kafka de forma segura.
 
-3. **Event Sourcing & Audit Trail**:
-   - Todo depósito, saque ou estorno no `account-service` gera um registro imutável na tabela `account_events` antes de atualizar o saldo final.
-   - Permite reconstruir o histórico financeiro completo (Ledger).
+3. **Event Sourcing & Audit Trail (Ledger)**:
+   - Todas as operações financeiras (`DEBIT`, `CREDIT`, `DEBIT_REVERSAL`) geram registros imutáveis na tabela `account_events`.
+   - Permite auditoria completa e reconstrução de histórico financeiro de cada conta.
 
 4. **Idempotência & Optimistic Locking**:
-   - Mensagens duplicadas no Kafka são ignoradas graças a tabela `processed_events`.
-   - Modificações concorrentes no saldo são prevenidas via trava otimista do JPA (`@Version`).
+   - Mensagens duplicadas no Kafka são tratadas de forma idempotente:
+     - No `account-service`, por meio da tabela `processed_events`.
+     - No `transfer-service`, por checagem de estado atual da transferência (`state machine idempotency`).
+   - Modificações concorrentes de saldo utilizam bloqueio otimista (`@Version`).
 
 5. **Dead Letter Queues (DLQ)**:
-   - Mensagens "envenenadas" que não puderam ser processadas após N tentativas caem em um tópico especial `.DLT`.
-   - APIs REST manuais (`/dlq/reprocess/{topic}`) permitem corrigir a infraestrutura e reprocessar os eventos.
+   - Mensagens com falha persistente de processamento são encaminhadas para tópicos `.DLT`.
+   - Endpoints REST (`POST /dlq/reprocess/{topic}`) permitem reprocessamento controlado de mensagens não entregues.
+
+6. **Real-Time Observability via SSE (Server-Sent Events)**:
+   - Ambos os serviços expõem streams SSE (`/events/stream`) emitindo eventos publicados e processados com payload JSON formatado em tempo real no Dashboard.
 
 ---
 
 ## 🧩 Estrutura do Projeto
 
-O projeto é dividido em três blocos principais:
+O projeto é dividido em três módulos:
 
-- **`/account-service`**: O verdadeiro dono do dinheiro. Não sabe o que é uma transferência, apenas atende comandos de `ReserveDebit`, `ApplyCredit` e `ReverseDebit`. Possui o banco `account_service`.
-- **`/transfer-service`**: O maestro das Sagas de transferência. Não lida com saldos, apenas comanda os passos e reage aos eventos de sucesso ou falha. Possui o banco `transfer_service`.
-- **`/frontend`**: Um WebApp visual em JavaScript puro que consome os dados e exibe a Saga (eventos e saldos mudando) animada em tempo real via Server-Sent Events (SSE).
-
-> Para detalhes mais profundos sobre a máquina de estados e o fluxo de mensagens, consulte o nosso **[Documento de Arquitetura (architecture.md)](architecture.md)**.
+- **`/account-service`** (Porta `8080`):
+  - Responsável pela integridade das contas, saldos e histórico (Ledger).
+  - Executa as operações atômicas: `ReserveDebit`, `ApplyCredit` e `ReverseDebit`.
+  - Publica eventos via Outbox Pattern (`debit-reserved`, `debit-failed`, `credit-applied`, `credit-failed`, `debit-reversed`).
+- **`/transfer-service`** (Porta `8081`):
+  - Orquestrador de Sagas e máquina de estados das transferências.
+  - Processa eventos de débito (`ProcessDebitEventsService`) e eventos de crédito (`ProcessCreditEventsService`).
+  - Dispara comandos de crédito (`credit-requested`) e estorno (`debit-reversal-requested`).
+- **`/frontend`**:
+  - Dashboard web moderno (Vanilla HTML/CSS/JS) com visualização em tempo real das contas, saldos, máquinas de estados das transferências e streaming de eventos Kafka com payload JSON expansível via SSE.
 
 ---
 
 ## ⚙️ Como Rodar o Projeto (Localmente)
 
 ### 1. Subir a Infraestrutura (Postgres + Kafka)
-Na raiz do projeto, inicie os containers base do Docker:
+Na raiz do projeto:
 ```bash
 docker-compose up -d
 ```
-*Isso vai iniciar o Apache Kafka (porta 9092), Kafka UI (porta 8090), Account DB (porta 5432) e Transfer DB (porta 5433).*
+*Inicia o Apache Kafka (porta `9092`), Kafka UI (porta `8090`), Account DB (porta `5432`) e Transfer DB (porta `5433`).*
 
 ### 2. Compilar os Microsserviços
-Na raiz do projeto, execute o build global:
 ```bash
 mvn clean compile
 ```
 
 ### 3. Iniciar as Aplicações
-Você precisará iniciar os dois serviços Spring Boot separadamente (via IDE ou linha de comando). 
-Por padrão, o Flyway criará as tabelas do banco e fará a carga inicial de algumas contas fake (Alice, Bob, etc).
+Execute os dois serviços Spring Boot em terminais separados:
 
-- Inicie o **`account-service`**: `mvn spring-boot:run -pl account-service` (rodará na porta `8080`)
-- Inicie o **`transfer-service`**: `mvn spring-boot:run -pl transfer-service` (rodará na porta `8081`)
+- **`account-service`**: `mvn spring-boot:run -pl account-service` (porta `8080`)
+- **`transfer-service`**: `mvn spring-boot:run -pl transfer-service` (porta `8081`)
 
-### 4. Abrir o Dashboard Visual em Tempo Real
-Abra o arquivo `frontend/index.html` diretamente no seu navegador.
-O Dashboard fará polling dos microsserviços e se conectará à stream SSE para mostrar bolinhas voando entre as colunas a cada pulso de evento do Kafka.
+### 4. Abrir o Dashboard Visual
+Abra o arquivo `frontend/index.html` no seu navegador (ou via Live Server).
 
 ---
 
 ## 📡 API Endpoints
 
 ### Transfer Service (porta 8081)
-- `POST /transfers` - Inicia uma nova transferência / saga
+- `POST /transfers` - Inicia uma nova transferência (Saga)
   ```json
   {
-    "originAccountId": "uuid-da-conta-origem",
-    "destinationAccountId": "uuid-da-conta-destino",
-    "amount": 150.00
+    "originAccountId": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+    "destinationAccountId": "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+    "amount": 50.00
   }
   ```
-- `GET /transfers` - Lista as transferências e seus status atuais.
-- `POST /dlq/reprocess/{topic}` - Drena a DLQ de um tópico e tenta processar as falhas novamente.
+- `GET /transfers` - Lista todas as transferências e seus estados atuais.
+- `GET /events/stream` - Stream SSE em tempo real de eventos emitidos pelo orchestrator (`credit-requested`, `debit-reversal-requested`).
+- `POST /dlq/reprocess/{topic}` - Drena a DLQ de um tópico e tenta reprocessar.
 
 ### Account Service (porta 8080)
-- `GET /accounts` - Lista as contas e os saldos atuais.
-- `GET /accounts/{id}/events` - Lista a auditoria/ledger histórico da conta.
-- `GET /events/stream` - Endpoint SSE contínuo de eventos do outbox para o Dashboard.
-- `POST /dlq/reprocess/{topic}` - Drena a DLQ e tenta reprocessar.
+- `GET /accounts` - Lista as contas e saldos atuais.
+- `GET /accounts/{id}/events` - Lista o histórico financeiro (Ledger / Event Sourcing) de uma conta.
+- `GET /events/stream` - Stream SSE em tempo real dos eventos publicados pelo Outbox.
+- `POST /dlq/reprocess/{topic}` - Drena a DLQ de um tópico e tenta reprocessar.
