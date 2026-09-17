@@ -4,5 +4,5 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 public interface HandleDebitReservedUseCase {
-    void handle(UUID transferId, UUID originAccountId, BigDecimal amount);
+    void handleDebitReserved(UUID transferId, UUID originAccountId, BigDecimal amount);
 }

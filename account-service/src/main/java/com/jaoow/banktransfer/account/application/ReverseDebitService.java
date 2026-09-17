@@ -45,7 +45,7 @@ public class ReverseDebitService implements ReverseDebitUseCase {
 
         account.credit(amount);
         accountRepository.save(account);
-        accountEventJpaRepository.save(new AccountEventJpaEntity(accountId, "CREDIT_REVERSAL", amount));
+        accountEventJpaRepository.save(new AccountEventJpaEntity(accountId, "DEBIT_REVERSAL", amount));
         processedEventRepository.save(new ProcessedEventJpaEntity(idempotencyKey, "DEBIT_REVERSED"));
 
         eventPublisher.publish("debit-reversed", accountId.toString(),

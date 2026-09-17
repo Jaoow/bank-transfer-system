@@ -22,7 +22,7 @@ public class CreditFailedListener {
     @KafkaListener(topics = "credit-failed", groupId = "transfer-service")
     public void handle(ConsumerRecord<String, String> record, Acknowledgment ack) throws Exception {
         var event = objectMapper.readValue(record.value(), CreditFailedPayload.class);
-        useCase.handle(event.transferId(), event.accountId(), event.amount(), event.reason());
+        useCase.handleCreditFailed(event.transferId(), event.accountId(), event.amount(), event.reason());
         ack.acknowledge();
     }
 

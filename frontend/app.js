@@ -102,34 +102,39 @@ function connectSSE() {
   const dot   = document.getElementById('connection-dot');
   const label = document.getElementById('connection-label');
 
-  try {
-    const es = new EventSource(`${ACCOUNT_SERVICE_URL}/events/stream`);
+  function setupEventSource(url) {
+    try {
+      const es = new EventSource(url);
 
-    es.onopen = () => {
-      dot.className   = 'status-dot connected';
-      label.textContent = 'Live';
-    };
+      es.onopen = () => {
+        dot.className   = 'status-dot connected';
+        label.textContent = 'Live';
+      };
 
-    es.addEventListener('connected', () => {
-      dot.className   = 'status-dot connected';
-      label.textContent = 'Live';
-    });
+      es.addEventListener('connected', () => {
+        dot.className   = 'status-dot connected';
+        label.textContent = 'Live';
+      });
 
-    es.addEventListener('kafka-event', (e) => {
-      const data = JSON.parse(e.data);
-      onKafkaEvent(data.topic, data.key, data.payload, data.timestamp);
-    });
+      es.addEventListener('kafka-event', (e) => {
+        const data = JSON.parse(e.data);
+        onKafkaEvent(data.topic, data.key, data.payload, data.timestamp);
+      });
 
-    es.onerror = () => {
+      es.onerror = () => {
+        dot.className   = 'status-dot error';
+        label.textContent = 'Reconnecting...';
+        es.close();
+        setTimeout(() => setupEventSource(url), 3000);
+      };
+    } catch {
       dot.className   = 'status-dot error';
-      label.textContent = 'Reconnecting...';
-      es.close();
-      setTimeout(connectSSE, 3000);
-    };
-  } catch {
-    dot.className   = 'status-dot error';
-    label.textContent = 'SSE unavailable — polling only';
+      label.textContent = 'SSE unavailable — polling only';
+    }
   }
+
+  setupEventSource(`${ACCOUNT_SERVICE_URL}/events/stream`);
+  setupEventSource(`${TRANSFER_SERVICE_URL}/events/stream`);
 }
 
 connectSSE();
@@ -159,16 +164,35 @@ function onKafkaEvent(topic, key, payload, timestamp) {
   spawnParticle(topic);
 
   // 4. Log entry
-  addEventLogEntry(topic, key, timestamp);
+  addEventLogEntry(topic, key, timestamp, payload);
 }
 
-function addEventLogEntry(topic, key, timestamp) {
+function addEventLogEntry(topic, key, timestamp, payload) {
   const container = document.getElementById('event-log-entries');
   const ts = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
   const shortKey = key ? key.substring(0, 8) + '…' : '';
+  
+  let payloadStr = '';
+  if (payload) {
+    try {
+      const parsed = JSON.parse(payload);
+      payloadStr = `
+        <details style="margin-top: 6px; cursor: pointer;">
+          <summary style="color:#a8b2d1; font-size:0.85em; user-select: none;">Show Payload</summary>
+          <pre style="margin-top: 8px; padding: 10px; background:#1e2029; border-radius: 6px; font-size:0.8em; overflow-x: auto; color: #a8b2d1;">${JSON.stringify(parsed, null, 2)}</pre>
+        </details>`;
+    } catch {
+      payloadStr = `
+        <details style="margin-top: 6px; cursor: pointer;">
+          <summary style="color:#a8b2d1; font-size:0.85em; user-select: none;">Show Payload</summary>
+          <pre style="margin-top: 8px; padding: 10px; background:#1e2029; border-radius: 6px; font-size:0.8em; overflow-x: auto; color: #a8b2d1;">${payload}</pre>
+        </details>`;
+    }
+  }
+
   const entry = document.createElement('div');
   entry.className = 'event-log-entry';
-  entry.innerHTML = `<span class="evt-topic">${topic}</span> · key: <span class="evt-key">${shortKey}</span> · ${ts}`;
+  entry.innerHTML = `<span class="evt-topic">${topic}</span> · key: <span class="evt-key">${shortKey}</span> · ${ts} ${payloadStr}`;
   container.prepend(entry);
 
   // Max log size

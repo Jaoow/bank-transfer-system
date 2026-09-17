@@ -21,7 +21,7 @@ public class DebitFailedListener {
     @KafkaListener(topics = "debit-failed", groupId = "transfer-service")
     public void handle(ConsumerRecord<String, String> record, Acknowledgment ack) throws Exception {
         var event = objectMapper.readValue(record.value(), DebitFailedPayload.class);
-        useCase.handle(event.transferId(), event.reason());
+        useCase.handleDebitFailed(event.transferId(), event.reason());
         ack.acknowledge();
     }
 

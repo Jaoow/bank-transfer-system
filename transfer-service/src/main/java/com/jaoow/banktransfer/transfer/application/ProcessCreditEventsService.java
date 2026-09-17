@@ -25,7 +25,7 @@ public class ProcessCreditEventsService implements HandleCreditAppliedUseCase, H
 
     @Override
     @Transactional
-    public void handle(UUID transferId, UUID originAccountId, BigDecimal amount) {
+    public void handleCreditApplied(UUID transferId, UUID originAccountId, BigDecimal amount) {
         Transfer transfer = transferRepository.findById(transferId)
                 .orElseThrow(() -> new IllegalStateException("Transferência não encontrada: " + transferId));
 
@@ -40,7 +40,7 @@ public class ProcessCreditEventsService implements HandleCreditAppliedUseCase, H
 
     // quando o crédito falhar
     @Override
-    public void handle(UUID transferId, UUID accountId, BigDecimal amount, String reason) {
+    public void handleCreditFailed(UUID transferId, UUID accountId, BigDecimal amount, String reason) {
         Transfer transfer = transferRepository.findById(transferId)
                 .orElseThrow(() -> new IllegalStateException("Transferência não encontrada: " + transferId));
 
@@ -48,7 +48,7 @@ public class ProcessCreditEventsService implements HandleCreditAppliedUseCase, H
             return; // já processado — mensagem duplicada, ignora silenciosamente aqui (idempotência via estado)
         }
 
-        transfer.markCancelled();
+        transfer.markCompensating();
         transferRepository.save(transfer);
 
         // TODO: publica debit-reversal-requested para o account-service devolver o valor

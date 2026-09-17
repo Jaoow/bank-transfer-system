@@ -14,19 +14,19 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 @Service
-public class ProcessSagaEventsService implements HandleDebitReservedUseCase, HandleDebitFailedUseCase, HandleDebitReversedUseCase {
+public class ProcessDebitEventsService implements HandleDebitReservedUseCase, HandleDebitFailedUseCase, HandleDebitReversedUseCase {
 
     private final TransferRepository transferRepository;
     private final EventPublisher eventPublisher;
 
-    public ProcessSagaEventsService(TransferRepository transferRepository, EventPublisher eventPublisher) {
+    public ProcessDebitEventsService(TransferRepository transferRepository, EventPublisher eventPublisher) {
         this.transferRepository = transferRepository;
         this.eventPublisher = eventPublisher;
     }
 
     @Override
     @Transactional
-    public void handle(UUID transferId, UUID originAccountId, BigDecimal amount) {
+    public void handleDebitReserved(UUID transferId, UUID originAccountId, BigDecimal amount) {
         Transfer transfer = transferRepository.findById(transferId)
                 .orElseThrow(() -> new IllegalStateException("Transferência não encontrada: " + transferId));
 
@@ -45,7 +45,7 @@ public class ProcessSagaEventsService implements HandleDebitReservedUseCase, Han
 
     @Override
     @Transactional
-    public void handle(UUID transferId, String reason) {
+    public void handleDebitFailed(UUID transferId, String reason) {
         Transfer transfer = transferRepository.findById(transferId)
                 .orElseThrow(() -> new IllegalStateException("Transferência não encontrada: " + transferId));
 
@@ -55,7 +55,7 @@ public class ProcessSagaEventsService implements HandleDebitReservedUseCase, Han
 
     @Override
     @Transactional
-    public void handle(UUID transferId) {
+    public void handleDebitReversed(UUID transferId) {
         Transfer transfer = transferRepository.findById(transferId)
                 .orElseThrow(() -> new IllegalStateException("Transferência não encontrada: " + transferId));
 
